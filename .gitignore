@@ -1,0 +1,16 @@
+# Original uncurated materials and large reference documents
+project_materials/
+
+# MATLAB generated files
+*.asv
+*.autosave
+*.m~
+slprj/
+codegen/
+*.slxc
+
+# OS and editor files
+.DS_Store
+.idea/
+.vscode/
+
