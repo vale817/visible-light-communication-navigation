@@ -79,10 +79,13 @@ planned path.
 
 ## Simulation Scenario
 
-The positioning and navigation example uses a `4 m × 4 m × 4 m` indoor space,
-four ceiling-mounted LEDs, and a `16 × 16` reference-point grid. It compares
-WKNN positioning results for different values of K and uses the estimated
-position as the starting point for A* path planning.
+The positioning and navigation example uses a `30 m × 20 m × 8 m` warehouse,
+20 ceiling-mounted LEDs, a `0.5 m` grid resolution, and multiple rows of
+storage racks. It compares WKNN positioning results for different values of K
+and uses the estimated position as the starting point for A* path planning.
+For practical runtime in the larger scenario, fingerprint generation uses the
+LOS channel by default; first-order NLOS reflection can be enabled through the
+`enable_NLOS` option in the script.
 
 ## Limitations
 
