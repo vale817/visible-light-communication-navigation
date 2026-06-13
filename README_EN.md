@@ -39,6 +39,8 @@ flowchart LR
   obstacle-avoiding path.
 - Validates multi-frequency LED signal separation using STM32, OPT101, ADC,
   DMA, and FFT.
+- Provides a warehouse-scale 3D UAV simulation comparing baseline 3D A* with
+  VLC-quality-aware 3D A*.
 
 ## Repository Structure
 
@@ -50,6 +52,8 @@ flowchart LR
 │   │   └── vlc_ook_gui.mlx
 │   ├── localization_navigation
 │   │   └── vlp_wknn_astar_obstacles.m
+│   ├── three_dimensional_navigation
+│   │   └── uav_vlc_3d_demo.m
 │   └── apps
 │       └── wknn_positioning_app.mlapp
 ├── docs
@@ -66,6 +70,7 @@ flowchart LR
 | `bpsk_link_demo.mlx` | Basic point-to-point communication and Barker-code frame synchronization |
 | `vlc_ook_gui.mlx` | OOK communication, optical channel modeling, and packetized text/image transmission GUI |
 | `vlp_wknn_astar_obstacles.m` | Multi-source RSS fingerprint positioning, obstacle modeling, and A* path planning |
+| `uav_vlc_3d_demo.m` | 3D warehouse, VLC quality field, and communication-aware 3D A* comparison |
 | `wknn_positioning_app.mlapp` | Interactive WKNN positioning interface |
 
 ## Requirements

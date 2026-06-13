@@ -31,6 +31,8 @@ flowchart LR
 - 基于多光源 RSS 指纹与 WKNN 算法完成二维位置估计。
 - 将估计位置映射到栅格地图，使用 A* 算法规划避障路径。
 - 使用 STM32、OPT101、ADC、DMA 和 FFT 验证多频 LED 信号分离方案。
+- 提供仓库环境下的三维无人机 VLC 质量感知航迹规划仿真，对比普通 3D A*
+  与通信感知 3D A*。
 
 ## 仓库结构
 
@@ -42,6 +44,8 @@ flowchart LR
 │   │   └── vlc_ook_gui.mlx
 │   ├── localization_navigation
 │   │   └── vlp_wknn_astar_obstacles.m
+│   ├── three_dimensional_navigation
+│   │   └── uav_vlc_3d_demo.m
 │   └── apps
 │       └── wknn_positioning_app.mlapp
 ├── docs
@@ -58,6 +62,7 @@ flowchart LR
 | `bpsk_link_demo.mlx` | 基础点对点通信链路与 Barker 码帧同步实验 |
 | `vlc_ook_gui.mlx` | OOK 通信、光信道建模、文本及图像分包传输 GUI |
 | `vlp_wknn_astar_obstacles.m` | 多光源 RSS 指纹定位、障碍物建模与 A* 路径规划 |
+| `uav_vlc_3d_demo.m` | 三维仓库、VLC 质量场与通信感知 3D A* 对比仿真 |
 | `wknn_positioning_app.mlapp` | WKNN 定位交互界面 |
 
 ## 运行环境
