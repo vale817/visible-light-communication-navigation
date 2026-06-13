@@ -1,20 +1,16 @@
 clear; clc; close all;
 
-%% ========================================================================
-%  第一部分: 参数设置
-%% ========================================================================
+%% 参数设置
 fprintf('========================================\n');
 fprintf('可见光定位与航迹规划仿真系统（考虑不可透光障碍物）\n');
 fprintf('========================================\n\n');
 
-% --- 仓库环境参数 ---
 room_size = [30, 20, 8];        % [长, 宽, 高] 米
 grid_resolution = 0.5;          % 指纹库与A*地图的栅格分辨率 (m)
 grid_cols = round(room_size(1) / grid_resolution);
 grid_rows = round(room_size(2) / grid_resolution);
 grid_spacing = grid_resolution;
 
-% --- LED发射端参数：5×4顶部灯具阵列 ---
 led_x = linspace(3, room_size(1)-3, 5);
 led_y = linspace(2.5, room_size(2)-2.5, 4);
 [LED_X, LED_Y] = meshgrid(led_x, led_y);
@@ -25,7 +21,6 @@ LED_freq = 800 + (0:num_LED-1) * 150;  % 每个LED使用独立调制频率
 P_tx     = 3;           % LED发射功率 (W)
 m_lambert = 1;          % 朗伯辐射模型阶数 (对应半功率角60度)
 
-% --- PD接收端参数 ---
 A_pd   = 1e-4;          % PD物理面积 (1cm² = 1e-4 m²)
 FOV    = 70;            % 视场角 (度)
 FOV_rad = deg2rad(FOV); % 转换为弧度
@@ -34,7 +29,6 @@ Ts     = 1;             % 光学滤波器增益
 n_refract = 1.5;        % 光学集中器折射率
 g_con  = n_refract^2 / sin(FOV_rad)^2;  % 光学集中器增益 ≈ 2.55
 
-% --- 信道和噪声参数 ---
 rho_wall = 0.8;         % 墙面反射率
 N_wall   = 10;          % 墙面离散化
 enable_NLOS = false;    % 大型仓库默认关闭NLOS以保证直接运行速度
@@ -47,14 +41,12 @@ T_abs    = 295;         % 绝对温度 (K)
 R_L      = 10e3;        % 负载电阻 (10 kΩ)
 I_bg     = 260e-6;      % 背景光电流 (260 μA)
 
-% --- 算法参数 ---
 K_values = [3, 5, 7];   % 测试不同K值
 num_test = 100;         % 测试点数量
 
-%% ===== 航迹规划参数 (A*) =====
+%% 仓库与航迹规划场景
 fprintf('\n--- 默认仓库航迹规划设置 ---\n');
 
-% 多排仓储货架，格式: [x_min, x_max, y_min, y_max]
 obstacles = [5, 12, 3, 4.5;
              5, 12, 7, 8.5;
              5, 12, 11, 12.5;
@@ -72,18 +64,14 @@ fprintf('仓库尺寸: %.0fm × %.0fm × %.0fm\n', room_size);
 fprintf('LED数量: %d, 地图栅格: %d × %d\n', num_LED, grid_cols, grid_rows);
 fprintf('开始构建指纹库...\n\n');
 
-%% ========================================================================
-%  第二部分: 离线阶段 - 指纹库构建（考虑障碍物遮挡）
-%% ========================================================================
+%% 离线阶段：构建指纹库
 
-% 创建参考点网格，再剔除障碍物内部的点
 x_grid = ((1:grid_cols) - 0.5) * grid_spacing;
 y_grid = ((1:grid_rows) - 0.5) * grid_spacing;
 [X_RP, Y_RP] = meshgrid(x_grid, y_grid);
 RP_coords = [X_RP(:), Y_RP(:), zeros(numel(X_RP), 1)];
 num_RP = size(RP_coords, 1);
 
-% ===== 去除落在障碍物内部的参考点 =====
 valid_RP = true(num_RP, 1);
 for i_obs = 1:size(obstacles, 1)
     obs  = obstacles(i_obs, :);    % [xmin xmax ymin ymax]
@@ -97,14 +85,11 @@ end
 RP_coords = RP_coords(valid_RP, :);    % 只保留有效参考点
 num_RP    = size(RP_coords, 1);
 
-% 初始化指纹库
 fingerprint_DB = zeros(num_RP, 2 + num_LED);  % [x, y, RSS1 ... RSSn]
 fingerprint_DB(:, 1:2) = RP_coords(:, 1:2);
 
-% 预计算墙面反射单元
 wall_elements = generate_wall_elements(room_size, N_wall);
 
-% 进度条
 fprintf('构建指纹库进度:\n');
 h = waitbar(0, '计算参考点指纹...');
 
@@ -113,25 +98,20 @@ for i = 1:num_RP
     RSS_vector = zeros(1, num_LED);
     I_sig_total = 0;
 
-    % 遍历每个LED
     for k = 1:num_LED
         LED_k = LED_pos(k, :);
 
-        % 计算LOS增益（考虑障碍物遮挡）
         H_LOS = calculate_LOS_gain(LED_k, RP_pos, m_lambert, A_pd, ...
                                    Ts, g_con, FOV_rad, obstacles);
 
-        % 计算NLOS增益 (一次反射，不考虑障碍物遮挡)
         H_NLOS = 0;
         if enable_NLOS
             H_NLOS = calculate_NLOS_gain(LED_k, RP_pos, wall_elements, ...
                                          rho_wall, m_lambert, A_pd, Ts, g_con, FOV_rad);
         end
 
-        % 总信道增益
         H_total = H_LOS + H_NLOS;
 
-        % 接收光功率和信号电流
         P_rx = P_tx * H_total;
         I_sig = R_pd * P_rx;
         I_sig_total = I_sig_total + I_sig;
@@ -139,17 +119,14 @@ for i = 1:num_RP
         RSS_vector(k) = I_sig;
     end
 
-    % 计算噪声
     sigma_shot2    = 2 * q * (I_sig_total + I_bg) * B;
     sigma_thermal2 = (4 * k_B * T_abs / R_L) * B;
     sigma_total2   = sigma_shot2 + sigma_thermal2;
     sigma_bin      = sqrt(sigma_total2 / (N_DFT / 2));
 
-    % 添加高斯噪声生成指纹
     RSS_noisy = RSS_vector + sigma_bin * randn(1, num_LED);
     fingerprint_DB(i, 3:end) = RSS_noisy;
 
-    % 更新进度
     if mod(i, 10) == 0 || i == num_RP
         waitbar(i/num_RP, h, ...
             sprintf('已完成: %d/%d (%.1f%%)', i, num_RP, 100*i/num_RP));
@@ -159,15 +136,12 @@ end
 close(h);
 fprintf('指纹库构建完成! (有效参考点数量: %d)\n\n', num_RP);
 
-%% ========================================================================
-%  第三部分: 在线阶段 - WKNN定位测试（考虑障碍物遮挡）
-%% ========================================================================
+%% 在线阶段：WKNN定位测试
 
 fprintf('开始在线定位测试...\n');
 fprintf('测试点数量: %d\n', num_test);
 fprintf('K值范围: %s\n\n', mat2str(K_values));
 
-% 初始化结果存储
 results = struct();
 for k_idx = 1:length(K_values)
     K = K_values(k_idx);
@@ -177,11 +151,9 @@ for k_idx = 1:length(K_values)
     results(k_idx).est_pos  = zeros(num_test, 2);
 end
 
-% 进度条
 h = waitbar(0, '定位测试中...');
 
 for t = 1:num_test
-    % 1. 生成一个不在障碍物内的测试点（TP_true）
     margin = 1.0;
     while true
         if t == num_test
@@ -191,7 +163,6 @@ for t = 1:num_test
                             margin + (room_size(2)-2*margin)*rand(), 0];
         end
 
-        % 检查该点是否在任何一个障碍物内
         is_in_obstacle = false;
         for obs_idx = 1:size(obstacles, 1)
             obs = obstacles(obs_idx, :); % [xmin xmax ymin ymax]
@@ -208,7 +179,6 @@ for t = 1:num_test
         end
     end
 
-    % 2. 计算测试点的RSS指纹（考虑LOS遮挡）
     RSS_measured = zeros(1, num_LED);
     I_sig_total = 0;
 
@@ -231,14 +201,12 @@ for t = 1:num_test
         RSS_measured(k) = I_sig;
     end
 
-    % 添加噪声
     sigma_shot2    = 2 * q * (I_sig_total + I_bg) * B;
     sigma_thermal2 = (4 * k_B * T_abs / R_L) * B;
     sigma_total2   = sigma_shot2 + sigma_thermal2;
     sigma_bin      = sqrt(sigma_total2 / (N_DFT / 2));
     RSS_measured   = RSS_measured + sigma_bin * randn(1, num_LED);
 
-    % 3. 对不同K值执行WKNN
     for k_idx = 1:length(K_values)
         K = K_values(k_idx);
         TP_est = WKNN_positioning(RSS_measured, fingerprint_DB, K);
@@ -257,16 +225,12 @@ end
 close(h);
 fprintf('定位测试完成!\n\n');
 
-%% ========================================================================
-%  第四部分: A* 航迹规划（基于障碍物栅格）
-%% ========================================================================
+%% A* 航迹规划
 
 fprintf('开始A*航迹规划...\n');
 
-% 1. 创建A*栅格地图 (0=可通行, 1=障碍)
 AStar_map = zeros(grid_rows, grid_cols);
 
-% 2. 栅格化障碍物
 for i = 1:size(obstacles, 1)
     obs = obstacles(i, :);
     x_min_idx = max(1, ceil(obs(1) / grid_spacing));
@@ -277,23 +241,19 @@ for i = 1:size(obstacles, 1)
     AStar_map(y_min_idx:y_max_idx, x_min_idx:x_max_idx) = 1;
 end
 
-% 3. 获取起点和终点（起点使用最后一个可复现测试点的估计位置）
 K_demo_idx = 2;  % 对应 K=5
 Start_pos_meters = results(K_demo_idx).est_pos(end, :); % [x, y]
 Goal_pos_meters_plot = Goal_pos_meters;                 % [x, y]
 
-% 4. 转换起点/终点为栅格索引 [行, 列]
 Start_node = [min(grid_rows, max(1, ceil(Start_pos_meters(2) / grid_spacing))), ...
               min(grid_cols, max(1, ceil(Start_pos_meters(1) / grid_spacing)))];
 
 Goal_node  = [min(grid_rows, max(1, ceil(Goal_pos_meters_plot(2) / grid_spacing))), ...
               min(grid_cols, max(1, ceil(Goal_pos_meters_plot(1) / grid_spacing)))];
 
-% 若定位误差使起点落入货架，则自动移动到最近可通行栅格
 Start_node = nearest_free_node(AStar_map, Start_node);
 Goal_node = nearest_free_node(AStar_map, Goal_node);
 
-% 5. 检查起点或终点是否在障碍物内
 if AStar_map(Start_node(1), Start_node(2)) == 1
     fprintf('警告: 起点在障碍物内! 规划可能失败。\n');
 end
@@ -301,10 +261,8 @@ if AStar_map(Goal_node(1), Goal_node(2)) == 1
     fprintf('警告: 终点在障碍物内! 规划可能失败。\n');
 end
 
-% 6. 执行A*算法
 [path_indices, path_found] = AStar_pathfinding(AStar_map, Start_node, Goal_node);
 
-% 7. 转换路径回米坐标 (用于绘图)
 path_meters = [];
 if path_found
     fprintf('A* 路径已找到! (共 %d 个步骤)\n', size(path_indices, 1));
@@ -318,31 +276,30 @@ end
 
 fprintf('航迹规划完成!\n\n');
 
-%% ========================================================================
-%  第五部分: 结果可视化
-%% ========================================================================
+%% 结果可视化与保存
 
 fprintf('生成可视化结果...\n');
 
-% ===== 图1: 仿真场景、定位与航迹规划 =====
-figure('Name', 'VLP定位与A*航迹规划', 'Position', [100, 100, 800, 700]);
+script_dir = fileparts(mfilename('fullpath'));
+results_dir = fullfile(script_dir, '..', '..', 'results', 'warehouse_navigation');
+if ~exist(results_dir, 'dir')
+    mkdir(results_dir);
+end
+
+fig1 = figure('Name', 'VLP定位与A*航迹规划', 'Position', [100, 100, 1000, 700]);
 hold on; grid on; axis equal;
 
-% 绘制参考点（有效 RP）
 plot(fingerprint_DB(:,1), fingerprint_DB(:,2), 'k.', 'MarkerSize', 8, ...
      'DisplayName', '参考点 (有效)');
 
-% 绘制LED位置
 plot(LED_pos(:,1), LED_pos(:,2), 'rs', 'MarkerSize', 15, ...
      'LineWidth', 2, 'MarkerFaceColor', 'y', 'DisplayName', 'LED发射器');
 
-% 标注LED
 for i = 1:num_LED
     text(LED_pos(i,1)+0.15, LED_pos(i,2), sprintf('LED%d\n%.0fHz', i, LED_freq(i)), ...
          'FontSize', 10, 'FontWeight', 'bold');
 end
 
-% 绘制障碍物（灰色矩形）
 for i = 1:size(obstacles, 1)
     obs = obstacles(i, :);
     x = obs(1);
@@ -352,12 +309,10 @@ for i = 1:size(obstacles, 1)
     rectangle('Position', [x, y, w, h], 'FaceColor', [0.5 0.5 0.5], ...
               'EdgeColor', 'k', 'LineWidth', 1);
 end
-% 为障碍物添加图例句柄
 plot(NaN, NaN, 's', 'MarkerFaceColor', [0.5 0.5 0.5], ...
     'MarkerEdgeColor', 'k', 'LineWidth', 1, 'MarkerSize', 10, ...
     'DisplayName', '障碍物');
 
-% VLP定位示例（与A*相同的起点）
 K_demo       = K_values(K_demo_idx);
 true_pos_demo = results(K_demo_idx).true_pos(end, :);
 est_pos_demo  = results(K_demo_idx).est_pos(end, :);
@@ -370,11 +325,9 @@ plot([true_pos_demo(1), est_pos_demo(1)], ...
      [true_pos_demo(2), est_pos_demo(2)], ...
      'b--', 'LineWidth', 1.5, 'DisplayName', 'VLP定位误差');
 
-% A* 目标点
 plot(Goal_pos_meters_plot(1), Goal_pos_meters_plot(2), 'gh', 'MarkerSize', 16, ...
      'LineWidth', 2, 'MarkerFaceColor', 'g', 'DisplayName', 'A* 目标点');
 
-% A*路径
 if path_found && ~isempty(path_meters)
     plot(path_meters(:, 1), path_meters(:, 2), 'm-o', 'LineWidth', 2, ...
          'MarkerSize', 6, 'MarkerFaceColor', 'm', 'DisplayName', 'A* 规划路径');
@@ -387,14 +340,12 @@ legend('Location', 'bestoutside');
 xlim([0, room_size(1)]); ylim([0, room_size(2)]);
 set(gca, 'FontSize', 11);
 hold off;
+save_result_figure(fig1, results_dir, '01_navigation_path');
 
-% ===== 图2: RSS指纹热图 =====
-figure('Name', 'RSS指纹分布', 'Position', [150, 50, 1200, 400]);
+fig2 = figure('Name', 'RSS指纹分布', 'Position', [150, 50, 1400, 420]);
 num_heatmaps = min(4, num_LED);
 for led_idx = 1:num_heatmaps
     subplot(1, num_heatmaps, led_idx);
-    % 需要将 RSS 按照原始网格位置画热图，这里简单用散点插值也可以，
-    % 但为了保持你原始结构，这里用 griddata 做插值。
     [Xg, Yg] = meshgrid(x_grid, y_grid);
     RSS_vals = fingerprint_DB(:, 2+led_idx);
     Zg = griddata(fingerprint_DB(:,1), fingerprint_DB(:,2), RSS_vals, Xg, Yg, 'natural');
@@ -406,9 +357,9 @@ for led_idx = 1:num_heatmaps
     hold on;
     plot(LED_pos(led_idx,1), LED_pos(led_idx,2), 'r*', 'MarkerSize', 12, 'LineWidth', 2);
 end
+save_result_figure(fig2, results_dir, '02_rss_fingerprint_maps');
 
-% ===== 图3: 不同K值的VLP误差CDF对比 =====
-figure('Name', 'VLP定位误差CDF', 'Position', [200, 100, 800, 600]);
+fig3 = figure('Name', 'VLP定位误差CDF', 'Position', [200, 100, 800, 600]);
 hold on; grid on;
 colors = ['r', 'b', 'g'];
 for k_idx = 1:length(K_values)
@@ -417,7 +368,6 @@ for k_idx = 1:length(K_values)
     plot(errors_sorted, cdf, [colors(k_idx), '-'], 'LineWidth', 2.5, ...
          'DisplayName', sprintf('K=%d', K_values(k_idx)));
 
-    % 计算统计量
     mean_err = mean(results(k_idx).errors);
     p90_index = max(1, ceil(0.9 * num_test));
     p90_err  = errors_sorted(p90_index);
@@ -430,9 +380,9 @@ title('不同K值的VLP定位误差CDF对比', 'FontSize', 14, 'FontWeight', 'bo
 legend('Location', 'southeast', 'FontSize', 11);
 xlim([0, max(results(2).errors)*1.1]);
 set(gca, 'FontSize', 11);
+save_result_figure(fig3, results_dir, '03_positioning_error_cdf');
 
-% ===== 图4: K值定位误差统计 =====
-figure('Name', 'VLP误差统计对比', 'Position', [250, 150, 700, 500]);
+fig4 = figure('Name', 'VLP误差统计对比', 'Position', [250, 150, 700, 500]);
 mean_errors = zeros(size(K_values));
 p90_errors = zeros(size(K_values));
 for k_idx = 1:length(K_values)
@@ -447,28 +397,25 @@ title('不同K值的VLP误差统计', 'FontSize', 14, 'FontWeight', 'bold');
 legend('平均误差', '90%误差', 'Location', 'northwest');
 grid on;
 set(gca, 'FontSize', 11);
+save_result_figure(fig4, results_dir, '04_positioning_error_summary');
 
-%% ========================================================================
-%  函数定义区
-%% ========================================================================
+fprintf('结果图片已保存至: %s\n', results_dir);
 
-% ===== 函数1: 生成墙面反射单元 =====
+%% 局部函数
+
 function wall_elems = generate_wall_elements(room, N)
     L = room(1); W = room(2); H = room(3);
     dL = L / N; dW = W / N; dH = H / N;
     dA = dL * dH;  % 或 dW * dH
     wall_elems = [];
 
-    % x=0 面
     [Y1, Z1] = meshgrid(linspace(dW/2, W-dW/2, N), linspace(dH/2, H-dH/2, N));
     wall1 = [zeros(N^2,1), Y1(:), Z1(:), ...
              ones(N^2,1), zeros(N^2,2), ...
              dA*ones(N^2,1), ones(N^2,1)];
-    % x=L 面
     wall2 = [L*ones(N^2,1), Y1(:), Z1(:), ...
              -ones(N^2,1), zeros(N^2,2), ...
              dA*ones(N^2,1), 2*ones(N^2,1)];
-    % y=0, y=W 面
     [X3, Z3] = meshgrid(linspace(dL/2, L-dL/2, N), linspace(dH/2, H-dH/2, N));
     wall3 = [X3(:), zeros(N^2,1), Z3(:), ...
              zeros(N^2,1), ones(N^2,1), zeros(N^2,1), ...
@@ -481,10 +428,7 @@ function wall_elems = generate_wall_elements(room, N)
     wall_elems(:, 9) = 1;  % 有效标志
 end
 
-% ===== 函数2: 计算LOS增益（考虑障碍物遮挡） =====
 function H = calculate_LOS_gain(LED_pos, PD_pos, m, A_pd, Ts, g, FOV, obstacles)
-    % obstacles: [N x 4], 每行 [xmin xmax ymin ymax]
-    % 如果传入且非空，则先判断是否被遮挡
     if nargin >= 8 && ~isempty(obstacles)
         if is_blocked_by_obstacles_2D(LED_pos, PD_pos, obstacles)
             H = 0;
@@ -492,7 +436,6 @@ function H = calculate_LOS_gain(LED_pos, PD_pos, m, A_pd, Ts, g, FOV, obstacles)
         end
     end
 
-    % 原始 LOS 计算
     vec = PD_pos - LED_pos;
     d = norm(vec);
     if d < 1e-6
@@ -500,7 +443,6 @@ function H = calculate_LOS_gain(LED_pos, PD_pos, m, A_pd, Ts, g, FOV, obstacles)
         return;
     end
 
-    % 假设 LED 垂直向下、PD 垂直向上
     cos_phi = abs(vec(3)) / d;
     cos_psi = abs(vec(3)) / d;
     psi = acos(cos_psi);
@@ -514,7 +456,6 @@ function H = calculate_LOS_gain(LED_pos, PD_pos, m, A_pd, Ts, g, FOV, obstacles)
     H = ((m+1) * A_pd / (2*pi*d^2)) * (cos_phi^m) * Ts * g_psi * cos_psi;
 end
 
-% ===== 函数3: 计算NLOS增益 (一次反射，不考虑障碍物遮挡) =====
 function H_NLOS = calculate_NLOS_gain(LED_pos, PD_pos, wall_elems, rho, m, A_pd, Ts, g, FOV)
     H_NLOS = 0;
     num_elems = size(wall_elems, 1);
@@ -524,7 +465,6 @@ function H_NLOS = calculate_NLOS_gain(LED_pos, PD_pos, wall_elems, rho, m, A_pd,
         elem_normal = wall_elems(i, 4:6);
         dA          = wall_elems(i, 7);
 
-        % LED -> 墙元
         vec1 = elem_pos - LED_pos;
         d1   = norm(vec1);
         if d1 < 1e-6
@@ -536,7 +476,6 @@ function H_NLOS = calculate_NLOS_gain(LED_pos, PD_pos, wall_elems, rho, m, A_pd,
             continue;
         end
 
-        % 墙元 -> PD
         vec2 = PD_pos - elem_pos;
         d2   = norm(vec2);
         if d2 < 1e-6
@@ -557,7 +496,6 @@ function H_NLOS = calculate_NLOS_gain(LED_pos, PD_pos, wall_elems, rho, m, A_pd,
     end
 end
 
-% ===== 函数4: WKNN定位算法 =====
 function pos_est = WKNN_positioning(RSS_measured, DB, K)
     RSS_db = DB(:, 3:end);
     distances = sqrt(sum((RSS_db - repmat(RSS_measured, size(RSS_db,1), 1)).^2, 2));
@@ -571,7 +509,6 @@ function pos_est = WKNN_positioning(RSS_measured, DB, K)
     pos_est = sum(weights .* DB(idx_KNN, 1:2), 1);
 end
 
-% ===== 函数5: 查找最近可通行栅格 =====
 function free_node = nearest_free_node(map, node)
     if map(node(1), node(2)) == 0
         free_node = node;
@@ -583,23 +520,19 @@ function free_node = nearest_free_node(map, node)
     free_node = [free_rows(idx), free_cols(idx)];
 end
 
-% ===== 函数6: A* 核心算法 =====
 function [path_indices, path_found] = AStar_pathfinding(map, start_node, goal_node)
 
     [rows, cols] = size(map);
     map_size = [rows, cols];
 
-    % 将 [row, col] 转换为线性索引
     start_ind = sub2ind(map_size, start_node(1), start_node(2));
     goal_ind  = sub2ind(map_size, goal_node(1), goal_node(2));
 
-    % 1. 初始化
     gScore = Inf(rows, cols);
     gScore(start_ind) = 0;
 
     fScore = Inf(rows, cols);
 
-    % 启发函数：欧几里得距离
     [r, c] = ind2sub(map_size, (1:rows*cols)');
     goal_r = goal_node(1);
     goal_c = goal_node(2);
@@ -614,7 +547,6 @@ function [path_indices, path_found] = AStar_pathfinding(map, start_node, goal_no
     cameFrom  = zeros(rows*cols, 1);  % 父节点线性索引
     path_found = false;
 
-    % 2. A* 主循环
     while any(openSet(:))
         fScore_open = fScore;
         fScore_open(~openSet) = Inf;
@@ -629,7 +561,6 @@ function [path_indices, path_found] = AStar_pathfinding(map, start_node, goal_no
         openSet(current_ind)   = false;
         closedSet(current_ind) = true;
 
-        % 遍历邻居（8方向）
         for dr = -1:1
             for dc = -1:1
                 if dr == 0 && dc == 0
@@ -639,7 +570,6 @@ function [path_indices, path_found] = AStar_pathfinding(map, start_node, goal_no
                 neighbor_r = current_r + dr;
                 neighbor_c = current_c + dc;
 
-                % 边界检查
                 if neighbor_r < 1 || neighbor_r > rows || ...
                    neighbor_c < 1 || neighbor_c > cols
                     continue;
@@ -647,12 +577,10 @@ function [path_indices, path_found] = AStar_pathfinding(map, start_node, goal_no
 
                 neighbor_ind = sub2ind(map_size, neighbor_r, neighbor_c);
 
-                % 障碍物，跳过
                 if map(neighbor_ind) == 1
                     continue;
                 end
 
-                % 已在 closedSet 中
                 if closedSet(neighbor_ind)
                     continue;
                 end
@@ -673,7 +601,6 @@ function [path_indices, path_found] = AStar_pathfinding(map, start_node, goal_no
         end
     end
 
-    % 3. 回溯路径
     if path_found
         path_linear = reconstructPath_AStar(cameFrom, current_ind);
         [path_rows, path_cols] = ind2sub(map_size, path_linear);
@@ -683,7 +610,6 @@ function [path_indices, path_found] = AStar_pathfinding(map, start_node, goal_no
     end
 end
 
-% ===== 函数7: 路径回溯 (A*) =====
 function path_indices = reconstructPath_AStar(cameFrom, current_ind)
     total_path = current_ind;
     while cameFrom(current_ind) ~= 0
@@ -693,9 +619,7 @@ function path_indices = reconstructPath_AStar(cameFrom, current_ind)
     path_indices = total_path;
 end
 
-% ===== 函数8: 判断 LED-PD 直线路径是否被任一障碍物遮挡 =====
 function blocked = is_blocked_by_obstacles_2D(LED_pos, PD_pos, obstacles)
-    % 在 x-y 平面上判断 line segment 是否与任一矩形相交
     p1 = LED_pos(1:2);  % [xL, yL]
     p2 = PD_pos(1:2);   % [xP, yP]
     blocked = false;
@@ -709,14 +633,12 @@ function blocked = is_blocked_by_obstacles_2D(LED_pos, PD_pos, obstacles)
         xmin = obs(1); xmax = obs(2);
         ymin = obs(3); ymax = obs(4);
 
-        % 1) 任一端点在障碍物内部 -> 视为遮挡
         if (p1(1) >= xmin && p1(1) <= xmax && p1(2) >= ymin && p1(2) <= ymax) || ...
            (p2(1) >= xmin && p2(1) <= xmax && p2(2) >= ymin && p2(2) <= ymax)
             blocked = true;
             return;
         end
 
-        % 2) 判断线段 p1-p2 是否与矩形四条边相交
         rect = [ xmin  ymin;
                  xmax  ymin;
                  xmax  ymax;
@@ -732,7 +654,6 @@ function blocked = is_blocked_by_obstacles_2D(LED_pos, PD_pos, obstacles)
     end
 end
 
-% ===== 函数9: 判断两条 2D 线段是否相交 =====
 function flag = segments_intersect_2D(p1, p2, p3, p4)
     d1 = direction_2D(p3, p4, p1);
     d2 = direction_2D(p3, p4, p2);
@@ -744,8 +665,12 @@ function flag = segments_intersect_2D(p1, p2, p3, p4)
 end
 
 function d = direction_2D(p1, p2, p3)
-    % 计算 (p3 - p1) 相对于 (p2 - p1) 的叉积符号
     d = (p3(1) - p1(1)) * (p2(2) - p1(2)) - ...
         (p3(2) - p1(2)) * (p2(1) - p1(1));
 end
 
+function save_result_figure(fig, output_dir, filename)
+    drawnow;
+    exportgraphics(fig, fullfile(output_dir, [filename '.png']), 'Resolution', 200);
+    savefig(fig, fullfile(output_dir, [filename '.fig']));
+end

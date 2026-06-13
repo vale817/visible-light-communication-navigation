@@ -49,13 +49,14 @@ flowchart LR
 │   │   ├── bpsk_link_demo.mlx
 │   │   └── vlc_ook_gui.mlx
 │   ├── localization_navigation
-│   │   ├── vlp_wknn_astar_obstacles.m
-│   │   └── vlp_wknn_astar_obstacles.mlx
+│   │   └── vlp_wknn_astar_obstacles.m
 │   └── apps
 │       └── wknn_positioning_app.mlapp
-└── docs
-    ├── hardware-prototype.md
-    └── technical-notes.md
+├── docs
+│   ├── hardware-prototype.md
+│   └── technical-notes.md
+└── results
+    └── warehouse_navigation
 ```
 
 ## File Overview
@@ -64,8 +65,7 @@ flowchart LR
 | --- | --- |
 | `bpsk_link_demo.mlx` | Basic point-to-point communication and Barker-code frame synchronization |
 | `vlc_ook_gui.mlx` | OOK communication, optical channel modeling, and packetized text/image transmission GUI |
-| `vlp_wknn_astar_obstacles.mlx` | Multi-source RSS fingerprint positioning, obstacle modeling, and A* path planning |
-| `vlp_wknn_astar_obstacles.m` | Plain MATLAB script containing the same simulation; recommended for direct execution |
+| `vlp_wknn_astar_obstacles.m` | Multi-source RSS fingerprint positioning, obstacle modeling, and A* path planning |
 | `wknn_positioning_app.mlapp` | Interactive WKNN positioning interface |
 
 ## Requirements
@@ -75,10 +75,10 @@ flowchart LR
 - Image Processing Toolbox, required for the image transmission demo
 
 Run `vlp_wknn_astar_obstacles.m` directly for the positioning and navigation
-simulation, or open the corresponding `.mlx` file in MATLAB Live Editor. Keep
-the default parameters on the first run to
-quickly generate the fingerprint database, positioning error results, and
-planned path.
+simulation. Keep the default parameters on the first run to quickly generate
+the fingerprint database, positioning error results, and planned path.
+Four result figures are automatically exported to
+`results/warehouse_navigation/`.
 
 ## Simulation Scenario
 

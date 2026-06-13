@@ -41,13 +41,14 @@ flowchart LR
 │   │   ├── bpsk_link_demo.mlx
 │   │   └── vlc_ook_gui.mlx
 │   ├── localization_navigation
-│   │   ├── vlp_wknn_astar_obstacles.m
-│   │   └── vlp_wknn_astar_obstacles.mlx
+│   │   └── vlp_wknn_astar_obstacles.m
 │   └── apps
 │       └── wknn_positioning_app.mlapp
-└── docs
-    ├── hardware-prototype.md
-    └── technical-notes.md
+├── docs
+│   ├── hardware-prototype.md
+│   └── technical-notes.md
+└── results
+    └── warehouse_navigation
 ```
 
 ## 文件说明
@@ -56,8 +57,7 @@ flowchart LR
 | --- | --- |
 | `bpsk_link_demo.mlx` | 基础点对点通信链路与 Barker 码帧同步实验 |
 | `vlc_ook_gui.mlx` | OOK 通信、光信道建模、文本及图像分包传输 GUI |
-| `vlp_wknn_astar_obstacles.mlx` | 多光源 RSS 指纹定位、障碍物建模与 A* 路径规划 |
-| `vlp_wknn_astar_obstacles.m` | 与 Live Script 内容相同的普通 MATLAB 脚本，推荐直接运行 |
+| `vlp_wknn_astar_obstacles.m` | 多光源 RSS 指纹定位、障碍物建模与 A* 路径规划 |
 | `wknn_positioning_app.mlapp` | WKNN 定位交互界面 |
 
 ## 运行环境
@@ -66,9 +66,9 @@ flowchart LR
 - Communications Toolbox
 - Image Processing Toolbox（运行图像传输演示时需要）
 
-建议直接运行 `vlp_wknn_astar_obstacles.m`。也可使用 MATLAB Live Editor
-打开对应 `.mlx` 文件。首次运行定位导航脚本时，
-建议保留默认参数，以便快速生成指纹库、定位误差结果和规划路径。
+直接运行 `vlp_wknn_astar_obstacles.m`。首次运行定位导航脚本时，建议保留
+默认参数，以便快速生成指纹库、定位误差结果和规划路径。
+运行完成后，四组结果图会自动保存至 `results/warehouse_navigation/`。
 
 ## 仿真场景
 
